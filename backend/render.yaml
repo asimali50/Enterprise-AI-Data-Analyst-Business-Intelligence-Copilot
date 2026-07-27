@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: enterprise-ai-data-analyst-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: DUCKDB_PATH
+        value: /tmp/analytics.duckdb
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: DEFAULT_AI_PROVIDER
+        sync: false
+      - key: DEFAULT_MODEL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
