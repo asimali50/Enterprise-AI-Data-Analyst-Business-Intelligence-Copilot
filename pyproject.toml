@@ -25,4 +25,4 @@ dependencies = [
 
 [tool.vercel]
 runtime = "python"
-entrypoint = "backend/app/main.py"
+entrypoint = "backend.app.main:app"
