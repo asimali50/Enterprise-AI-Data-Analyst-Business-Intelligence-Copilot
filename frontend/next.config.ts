@@ -14,6 +14,12 @@ const nextConfig: NextConfig = {
     return config;
   },
   async rewrites() {
+    // In production on Vercel, routing is handled by vercel.json rewrites.
+    // These rewrites are only needed in local development to proxy API calls
+    // to the locally-running FastAPI backend.
+    if (process.env.NODE_ENV !== "development") {
+      return [];
+    }
     return [
       {
         source: "/api/v1/health",
