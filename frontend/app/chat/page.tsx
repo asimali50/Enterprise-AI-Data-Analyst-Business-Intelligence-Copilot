@@ -1,19 +1,23 @@
 "use client";
 
 import { Suspense, useRef, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { Navigation } from "@/components/Navigation";
+import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSearchParams, useRouter } from "next/navigation";
+import { AppShell } from "@/components/layout/AppShell";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { SuggestedQuestions } from "@/components/chat/SuggestedQuestions";
 import { useChat } from "@/hooks/useChat";
-import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { motion } from "framer-motion";
+import { MessageSquareText } from "lucide-react";
 
 function ChatContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const datasetId = searchParams.get("dataset");
-  const { messages, sendMessage, isLoading } = useChat(datasetId);
+  usePageTitle("Chat with Data");
+  const { messages, sendMessage, isLoading, error } = useChat(datasetId);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -22,46 +26,44 @@ function ChatContent() {
 
   if (!datasetId) {
     return (
-      <div className="min-h-screen">
-        <Navigation />
-        <div className="max-w-3xl mx-auto px-6 py-16 text-center">
-          <h1 className="text-2xl font-bold mb-4">AI Data Chat</h1>
-          <p className="text-muted-foreground mb-6">
-            Upload and analyze a dataset first, then ask questions about it here.
-          </p>
-          <a href="/dashboard" className="text-primary hover:underline">
-            Go to Dashboard →
-          </a>
+      <AppShell>
+        <div className="max-w-3xl mx-auto px-6 py-10">
+          <EmptyState
+            icon={MessageSquareText}
+            title="Chat with your data"
+            description="Select a dataset to ask questions in plain English and get AI-powered answers about your data."
+            action={{ label: "Go to Datasets", onClick: () => router.push("/datasets") }}
+          />
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Navigation />
-      <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-6 py-6">
+    <AppShell>
+      <div className="flex flex-col h-[calc(100vh-3.5rem)] max-w-4xl mx-auto w-full px-6 py-6">
         {/* Header */}
         <div className="mb-4">
-          <h1 className="text-lg font-semibold">Data Chat</h1>
+          <h1 className="text-lg font-semibold">Chat with Data</h1>
           <p className="text-xs text-muted-foreground">
-            Ask questions about your dataset • Context-aware AI responses
+            Ask questions about your dataset &middot; Context-aware AI responses &middot; Natural language insights
           </p>
         </div>
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 scrollbar-thin">
           {messages.length === 0 && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              style={{ textAlign: "center", paddingTop: 48, paddingBottom: 48 }}
+              className="text-center pt-12 pb-8"
             >
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mx-auto mb-4">
-                <span className="text-3xl">💬</span>
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mx-auto mb-4">
+                <MessageSquareText className="h-8 w-8 text-primary" strokeWidth={1.5} />
               </div>
-              <p className="text-muted-foreground mb-6">What would you like to know about your data?</p>
+              <p className="text-lg font-medium mb-1">What would you like to know?</p>
+              <p className="text-sm text-muted-foreground mb-6">Ask questions about your data in plain English</p>
               <SuggestedQuestions onAsk={sendMessage} />
             </motion.div>
           )}
@@ -91,20 +93,45 @@ function ChatContent() {
               </div>
             </div>
           )}
+
+          {error && (
+            <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              <MessageSquareText className="h-4 w-4 shrink-0" />
+              <span>
+                {error instanceof Error
+                  ? error.message
+                  : "Failed to generate a response. Check that an AI provider is configured."}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Input */}
-        <div style={{ borderTopWidth: 1, borderTopStyle: "solid", borderColor: "var(--border)", paddingTop: 16 }}>
+        <div className="border-t border-border pt-4">
           <ChatInput onSend={sendMessage} disabled={isLoading} />
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
 
 export default function ChatPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={
+      <AppShell>
+        <div className="max-w-4xl mx-auto px-6 py-10">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-border" />
+                <div className="absolute inset-0 animate-spin rounded-full border-2 border-t-primary border-r-transparent border-b-transparent border-l-transparent" style={{ animationDuration: "0.6s" }} />
+              </div>
+              <p className="text-sm text-muted-foreground">Loading chat...</p>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    }>
       <ChatContent />
     </Suspense>
   );

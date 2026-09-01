@@ -43,6 +43,9 @@ dist/
 .cache/
 .output/
 .env.*.local
+*.tsbuildinfo
+# Stray root lockfile (the real one lives in frontend/package-lock.json)
+/package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

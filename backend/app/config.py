@@ -2,10 +2,11 @@
 Backend Configuration
 Enterprise AI Data Analyst - Config Management
 """
+import json
 import os
 from functools import lru_cache
 from typing import Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -46,7 +47,26 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
 
     # CORS
-    CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+
+    @property
+    def cors_origins_list(self) -> list:
+        """Parse CORS_ORIGINS into a list.
+
+        Accepts both a comma-separated string ("http://a,http://b") and a
+        JSON array string ('["http://a","http://b"]'). Whitespace around each
+        origin is stripped, and empty entries are dropped so a trailing comma
+        doesn't silently add an empty origin.
+        """
+        raw = self.CORS_ORIGINS.strip()
+        if raw.startswith("["):
+            try:
+                loaded = json.loads(raw)
+                if isinstance(loaded, list):
+                    return [str(o).strip() for o in loaded if str(o).strip()]
+            except json.JSONDecodeError:
+                pass
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
     # Session
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
@@ -58,9 +78,39 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    def validate_production(self) -> None:
+        """Refuse to run in production with insecure settings.
+
+        Called at startup when ENVIRONMENT=production. Prevents accidental
+        deploys that ship the default dev secret, leave debug on, or expose a
+        wildcard CORS origin.
+        """
+        if not self.is_production:
+            return
+
+        errors: list = []
+        if self.SECRET_KEY == "dev-secret-key-change-in-production":
+            errors.append("SECRET_KEY is still set to the insecure development default")
+        if self.DEBUG:
+            errors.append("DEBUG is True — must be False in production")
+        if "*" in self.cors_origins_list:
+            errors.append("CORS_ORIGINS includes '*' — must be restricted in production")
+
+        if errors:
+            raise RuntimeError(
+                "Refusing to start in production with insecure configuration:\n- "
+                + "\n- ".join(errors)
+            )
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT in ("production", "prod")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
 
 @lru_cache()

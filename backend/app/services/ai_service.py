@@ -110,7 +110,7 @@ class AIService:
         mapping = {
             "openai": lambda m: m,
             "anthropic": lambda m: m,
-            "google": lambda m: f"vertex_ai/{m}",
+            "google": lambda m: f"gemini/{m}",
             "groq": lambda m: f"groq/{m}",
             "ollama": lambda m: f"ollama/{m}",
         }

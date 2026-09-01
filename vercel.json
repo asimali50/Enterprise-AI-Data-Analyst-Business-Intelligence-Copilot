@@ -1,16 +1,5 @@
 {
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 30
-    }
-  },
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/.next",
-  "installCommand": "cd frontend && npm install",
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index.py"
-    }
-  ]
+  "installCommand": "cd frontend && npm install"
 }

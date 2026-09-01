@@ -81,3 +81,21 @@ class AIProviderConfig(Base):
     max_tokens = Column(Integer, default=4000)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_used = Column(DateTime, nullable=True)
+
+
+class TrainingRun(Base):
+    """Stored result of a multi-model training pipeline run"""
+    __tablename__ = "training_runs"
+
+    id = Column(String, primary_key=True, index=True)
+    dataset_id = Column(String, index=True)
+    task = Column(String)                      # regression | classification
+    target = Column(String, nullable=True)
+    n_rows = Column(Integer)
+    n_features = Column(Integer)
+    best_model = Column(String, nullable=True)
+    primary_metric = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    summary = Column(JSON)                     # per-model metrics array
+    skipped = Column(JSON)                     # models skipped with reason
+    config = Column(JSON)                      # request params

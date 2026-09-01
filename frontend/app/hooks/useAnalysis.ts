@@ -4,6 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/services/api";
 import toast from "react-hot-toast";
 
+export function useDatasets() {
+  return useQuery({
+    queryKey: ["datasets"],
+    queryFn: () => api.listDatasets(),
+  });
+}
+
 export function useUploadDataset() {
   const qc = useQueryClient();
   return useMutation({

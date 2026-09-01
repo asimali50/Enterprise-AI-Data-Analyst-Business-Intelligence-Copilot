@@ -34,10 +34,18 @@ class DuckDBClient:
             raise
 
     def register_dataframe(self, df: pd.DataFrame, table_name: str) -> bool:
-        """Register pandas DataFrame as DuckDB table"""
+        """Persist a pandas DataFrame as a DuckDB table.
+
+        A plain ``conn.register()`` only creates a connection-scoped in-memory
+        view, which silently disappears on process restart. Production
+        deployments (Vercel serverless, restarts) must survive that, so the
+        DataFrame is materialized into the on-disk database instead.
+        """
         try:
-            self.conn.register(table_name, df)
-            logger.info(f"DataFrame registered as table: {table_name}")
+            self.conn.execute(
+                f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT * FROM df'
+            )
+            logger.info(f"DataFrame persisted as table: {table_name}")
             return True
         except Exception as e:
             logger.error(f"Error registering DataFrame: {e}")

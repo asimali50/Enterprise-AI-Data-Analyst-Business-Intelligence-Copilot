@@ -14,6 +14,31 @@ from app.utils.logger import logger
 
 router = APIRouter(prefix="/analyze", tags=["analysis"])
 
+# The Statistical Analysis page lets users pick analyses by name. Those names
+# map onto the pipeline stages the backend actually implements. Any unknown
+# type is dropped rather than silently running nothing.
+TYPE_ALIASES = {
+    "descriptive_statistics": "analytics",
+    "correlation": "analytics",
+    "regression": "analytics",
+    "classification": "analytics",
+    "clustering": "analytics",
+    "forecasting": "analytics",
+    "feature_importance": "profiling",
+}
+
+
+def normalize_analysis_types(analysis_types) -> list:
+    """Resolve user-facing analysis names to pipeline stage names."""
+    if not analysis_types:
+        return ["profiling", "analytics", "visualization", "insights"]
+    normalized = []
+    for t in analysis_types:
+        resolved = TYPE_ALIASES.get(t, t)
+        if resolved not in normalized:
+            normalized.append(resolved)
+    return normalized
+
 
 @router.post("/start")
 async def start_analysis(
@@ -41,17 +66,34 @@ async def start_analysis(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Dataset not found"
                 )
+
+            analysis_types = normalize_analysis_types(request.analysis_types)
+            analysis_id = str(uuid.uuid4())
+
+            # Persist the analysis_id so /analyze/status/{id} can track it.
+            # The background pipeline updates this row as it progresses.
+            pipeline_record = AnalysisResult(
+                id=analysis_id,
+                dataset_id=request.dataset_id,
+                analysis_type="pipeline",
+                result_data={
+                    "status": "queued",
+                    "analysis_types": analysis_types,
+                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                },
+                processing_time_seconds=0.0,
+            )
+            db.add(pipeline_record)
+            db.commit()
         finally:
             db.close()
-
-        analysis_id = str(uuid.uuid4())
 
         # Queue the full multi-agent pipeline as a background task
         background_tasks.add_task(
             _run_analysis_pipeline,
             analysis_id=analysis_id,
             dataset_id=request.dataset_id,
-            analysis_types=request.analysis_types,
+            analysis_types=analysis_types,
             provider=request.ai_provider,
             model=request.ai_model,
         )
@@ -64,7 +106,7 @@ async def start_analysis(
             "dataset_id": request.dataset_id,
             "status": "queued",
             "message": "Multi-agent analysis pipeline queued successfully",
-            "analysis_types": request.analysis_types,
+            "analysis_types": analysis_types,
         }
 
     except HTTPException:
@@ -88,11 +130,25 @@ async def get_analysis_status(analysis_id: str) -> dict:
             ).first()
 
             if not result:
-                # Check if dataset is still processing
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Analysis not found. It may still be queued."
+                    detail="Analysis not found"
                 )
+
+            # The pipeline record's result_data carries the live status.
+            if result.analysis_type == "pipeline":
+                info = result.result_data or {}
+                return {
+                    "analysis_id": analysis_id,
+                    "dataset_id": result.dataset_id,
+                    "analysis_type": "pipeline",
+                    "status": info.get("status", "queued"),
+                    "analysis_types": info.get("analysis_types", []),
+                    "completed_types": info.get("completed_types", []),
+                    "error": info.get("error"),
+                    "processing_time_seconds": result.processing_time_seconds,
+                    "created_at": result.created_at.isoformat() if result.created_at else None,
+                }
 
             return {
                 "analysis_id": analysis_id,
@@ -158,7 +214,8 @@ async def get_all_results(dataset_id: str) -> dict:
         db = get_sqlite().get_session()
         try:
             results = db.query(AnalysisResult).filter(
-                AnalysisResult.dataset_id == dataset_id
+                AnalysisResult.dataset_id == dataset_id,
+                AnalysisResult.analysis_type != "pipeline",
             ).all()
 
             dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
@@ -196,6 +253,41 @@ async def get_all_results(dataset_id: str) -> dict:
         )
 
 
+def _update_pipeline_status(
+    analysis_id: str,
+    dataset_id: str,
+    status: str,
+    completed_types: Optional[List[str]] = None,
+    error: Optional[str] = None,
+    processing_time: Optional[float] = None,
+) -> None:
+    """Update the persisted pipeline record for /analyze/status polling"""
+    try:
+        db = get_sqlite().get_session()
+        try:
+            record = db.query(AnalysisResult).filter(
+                AnalysisResult.id == analysis_id
+            ).first()
+            if record:
+                # NOTE: build a NEW dict — SQLAlchemy does not detect in-place
+                # mutation of a plain JSON column, so assigning the same object
+                # back would silently skip the UPDATE.
+                info = dict(record.result_data or {})
+                info["status"] = status
+                if completed_types is not None:
+                    info["completed_types"] = completed_types
+                if error is not None:
+                    info["error"] = error
+                record.result_data = info
+                if processing_time is not None:
+                    record.processing_time_seconds = processing_time
+                db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Failed to update pipeline status: {e}")
+
+
 async def _run_analysis_pipeline(
     analysis_id: str,
     dataset_id: str,
@@ -207,6 +299,8 @@ async def _run_analysis_pipeline(
     try:
         logger.info(f"Running analysis pipeline: {analysis_id}")
 
+        _update_pipeline_status(analysis_id, dataset_id, "processing", completed_types=[])
+
         results = await analysis_crew.run_full_analysis(
             dataset_id=dataset_id,
             analysis_types=analysis_types,
@@ -214,10 +308,25 @@ async def _run_analysis_pipeline(
             model=model,
         )
 
-        logger.info(f"Analysis pipeline completed: {analysis_id} in {results.get('processing_time_seconds', 0):.2f}s")
+        processing_time = results.get("processing_time_seconds", 0)
+        _update_pipeline_status(
+            analysis_id,
+            dataset_id,
+            "completed",
+            completed_types=analysis_types,
+            processing_time=processing_time,
+        )
+
+        logger.info(f"Analysis pipeline completed: {analysis_id} in {processing_time:.2f}s")
 
     except Exception as e:
         logger.error(f"Analysis pipeline failed: {analysis_id} - {e}")
+        _update_pipeline_status(
+            analysis_id,
+            dataset_id,
+            "failed",
+            error=str(e),
+        )
         # Update dataset status to failed
         try:
             db = get_sqlite().get_session()

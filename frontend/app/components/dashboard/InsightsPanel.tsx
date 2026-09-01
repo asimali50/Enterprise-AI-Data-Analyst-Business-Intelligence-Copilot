@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Lightbulb, AlertTriangle } from "lucide-react";
 import type { BusinessInsight, ActionItem } from "@/types";
 
 interface InsightsPanelProps {
@@ -71,7 +72,9 @@ export function InsightsPanel({
         {opportunities.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-emerald-500">💡 Opportunities</CardTitle>
+              <CardTitle className="flex items-center gap-1.5 text-sm font-medium text-emerald-500">
+                <Lightbulb className="h-4 w-4" /> Opportunities
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2">
@@ -88,7 +91,9 @@ export function InsightsPanel({
         {risks.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-amber-500">⚠️ Risks</CardTitle>
+              <CardTitle className="flex items-center gap-1.5 text-sm font-medium text-amber-500">
+                <AlertTriangle className="h-4 w-4" /> Risks
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2">

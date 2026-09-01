@@ -3,6 +3,7 @@
  */
 import axios from "axios";
 import type {
+  Dataset,
   DatasetPreview,
   AnalysisStartResponse,
   FullAnalysisResponse,
@@ -10,6 +11,14 @@ import type {
   ChatResponse,
   Report,
   AIProvidersResponse,
+  AutoMLInspect,
+  AutoMLRecommendation,
+  TrainResult,
+  AutoMLTask,
+  TrainingModelInfo,
+  TrainingRun,
+  TrainingRunResponse,
+  TrainingRunSummary,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
@@ -19,6 +28,13 @@ const client = axios.create({
   timeout: 120_000,
   headers: { "Content-Type": "application/json" },
 });
+
+// ─── Datasets ───────────────────────────────────────────────
+
+export async function listDatasets(): Promise<{ datasets: Dataset[]; count: number }> {
+  const { data } = await client.get("/upload/datasets");
+  return data;
+}
 
 // ─── Upload ─────────────────────────────────────────────────
 
@@ -98,9 +114,189 @@ export async function getAIProviders(): Promise<AIProvidersResponse> {
   return data;
 }
 
+// ─── Custom Analysis ─────────────────────────────────────────
+
+export async function runCustomAnalysis(
+  datasetId: string,
+  analysisTypes: string[],
+): Promise<AnalysisStartResponse> {
+  return startAnalysis(datasetId, analysisTypes);
+}
+
+// ─── Cleaning ────────────────────────────────────────────────
+
+export interface CleaningAction {
+  id: string;
+  type: string;
+  column?: string;
+  title: string;
+  description: string;
+  impact: "high" | "medium" | "low";
+  category: string;
+}
+
+export async function getCleaningRecommendations(datasetId: string): Promise<{ recommendations: CleaningAction[] }> {
+  const { data } = await client.get(`/cleaning/recommendations/${datasetId}`);
+  return data;
+}
+
+export async function applyCleaningActions(
+  datasetId: string,
+  decisions: { action_id: string; apply: boolean }[],
+): Promise<{ success: boolean; actions_applied: number }> {
+  const { data } = await client.post(`/cleaning/apply/${datasetId}`, { decisions });
+  return data;
+}
+
+// ─── Chart Generation ─────────────────────────────────────────
+
+export interface ChartConfig {
+  chartType: string;
+  xAxis: string;
+  yAxis: string;
+  aggregation: string;
+  colorScheme: string;
+  filters: { column: string; operator: string; value: string }[];
+  title: string;
+}
+
+export interface GeneratedChart {
+  success: boolean;
+  chart_id: string;
+  data: Record<string, unknown>[];
+  layout: Record<string, unknown>;
+}
+
+export async function generateChart(
+  datasetId: string,
+  config: ChartConfig,
+): Promise<GeneratedChart> {
+  const { data } = await client.post(`/visualizations/generate/${datasetId}`, config);
+  return data;
+}
+
+// ─── Export ───────────────────────────────────────────────────
+
+export interface ExportFile {
+  format: string;
+  type?: string;
+  url: string;
+}
+
+export interface ExportResult {
+  success: boolean;
+  files: ExportFile[];
+  unsupported_formats?: string[];
+  message?: string;
+}
+
+export async function exportResults(
+  datasetId: string,
+  formats: string[],
+): Promise<ExportResult> {
+  const { data } = await client.post(`/export/${datasetId}`, { formats });
+  return data;
+}
+
+/**
+ * Trigger a browser download for an export URL.
+ * Returns false if the download failed (network error / server 404/500).
+ */
+export async function downloadExportFile(url: string, fallbackName: string): Promise<boolean> {
+  try {
+    const { data, status } = await client.get(url, { responseType: "blob" });
+    if (status < 200 || status >= 300) return false;
+
+    const contentType = data?.type || "";
+    const ext = url.split("/").pop() || "download";
+    const blob = new Blob([data], { type: contentType });
+    const objectUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `${fallbackName}.${ext}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(objectUrl);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Health ──────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<{ status: string; version: string }> {
   const { data } = await client.get("/health");
+  return data;
+}
+
+// ─── AutoML Studio ───────────────────────────────────────────
+
+export async function inspectAutomlDataset(datasetId: string): Promise<AutoMLInspect> {
+  const { data } = await client.get(`/automl/inspect/${datasetId}`);
+  return data;
+}
+
+export async function recommendAutomlModels(
+  datasetId: string,
+  target?: string,
+  task?: string,
+): Promise<AutoMLRecommendation> {
+  const { data } = await client.get(`/automl/models/${datasetId}`, {
+    params: { target: target || undefined, task: task || undefined },
+  });
+  return data;
+}
+
+export async function trainAutomlModel(request: {
+  dataset_id: string;
+  target: string;
+  task: string;
+  model_id?: string;
+}): Promise<TrainResult> {
+  const { data } = await client.post("/automl/train", request);
+  return data;
+}
+
+// ─── Model Training (multi-model pipeline) ─────────────────────
+
+export async function listTrainingModels(
+  task?: string,
+): Promise<{
+  task?: string;
+  classification?: TrainingModelInfo[];
+  regression?: TrainingModelInfo[];
+  models?: TrainingModelInfo[];
+}> {
+  const { data } = await client.get("/training/models", {
+    params: { task: task || undefined },
+  });
+  return data;
+}
+
+export async function runTrainingPipeline(request: {
+  dataset_id: string;
+  target?: string;
+  task?: string;
+  models?: string[];
+}): Promise<TrainingRunResponse> {
+  const { data } = await client.post("/training/run", request);
+  return data;
+}
+
+export async function listTrainingRuns(
+  datasetId: string,
+): Promise<{ dataset_id: string; runs: TrainingRunSummary[] }> {
+  const { data } = await client.get(`/training/runs/${datasetId}`);
+  return data;
+}
+
+export async function getTrainingRun(
+  datasetId: string,
+  runId: string,
+): Promise<TrainingRun> {
+  const { data } = await client.get(`/training/runs/${datasetId}/${runId}`);
   return data;
 }

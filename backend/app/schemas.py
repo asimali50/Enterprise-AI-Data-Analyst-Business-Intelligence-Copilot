@@ -4,7 +4,7 @@ Enterprise AI Data Analyst - Data Validation Schemas
 """
 from typing import Any, Dict, List, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ============== File Upload Schemas ==============
@@ -22,6 +22,14 @@ class ColumnInfo(BaseModel):
     non_null_count: int
     null_count: int
     null_percentage: float
+
+    @field_validator("name", "dtype")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        """Column name/dtype must not be empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("must not be blank")
+        return v
 
 
 class DatasetPreview(BaseModel):

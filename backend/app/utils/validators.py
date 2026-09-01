@@ -43,8 +43,10 @@ def sanitize_filename(filename: str) -> str:
     # Keep only alphanumeric, dash, underscore, and dot
     import re
     sanitized = re.sub(r'[^\w\-\.]', '_', filename)
-    # Remove leading/trailing dots and dashes
-    sanitized = sanitized.strip('.-')
+    # Remove leading/trailing dots, dashes, and underscores. This also cleans
+    # up path-traversal attempts like "../../etc/passwd" (which become
+    # ".._.._.._etc_passwd") down to a clean, safe basename.
+    sanitized = sanitized.strip('.-_')
     return sanitized
 
 

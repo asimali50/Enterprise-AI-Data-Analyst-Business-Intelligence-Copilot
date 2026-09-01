@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/utils/cn";
+import ReactMarkdown from "react-markdown";
 import type { ChatMessage as ChatMessageType } from "@/types";
 
 interface ChatMessageProps {
@@ -25,7 +26,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
             : "bg-muted text-foreground",
         )}
       >
-        <div className="whitespace-pre-wrap break-words">{message.content}</div>
+        {isUser ? (
+          <div className="whitespace-pre-wrap break-words">{message.content}</div>
+        ) : (
+          <div className="prose prose-sm max-w-none text-[13px] [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_pre]:my-2 [&_code]:rounded [&_table]:text-xs">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
+        )}
       </div>
       {isUser && (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground text-xs font-bold">

@@ -9,6 +9,8 @@ from app.utils.file_handler import file_handler
 from app.services.data_processor import data_processor_service
 from app.schemas import DatasetPreview, ErrorResponse
 from app.utils.logger import logger
+from app.database.sqlite_client import get_sqlite
+from app.database.models import Dataset as DatasetModel
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -95,6 +97,44 @@ async def get_preview(dataset_id: str) -> DatasetPreview:
         raise
     except Exception as e:
         logger.error(f"Preview error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/datasets")
+async def list_datasets() -> dict:
+    """List all uploaded datasets with their analysis status."""
+    try:
+        from app.database.sqlite_client import get_sqlite
+        from app.database.models import Dataset as DatasetModel
+
+        db = get_sqlite().get_session()
+        try:
+            datasets = db.query(DatasetModel).order_by(
+                DatasetModel.upload_date.desc()
+            ).all()
+            return {
+                "datasets": [
+                    {
+                        "id": ds.id,
+                        "filename": ds.filename,
+                        "num_rows": ds.num_rows or 0,
+                        "num_columns": ds.num_columns or 0,
+                        "file_size_mb": round((ds.file_size_bytes or 0) / (1024 * 1024), 2),
+                        "health_score": ds.health_score or 0,
+                        "analysis_status": ds.analysis_status or "pending",
+                        "upload_date": ds.upload_date.isoformat() if ds.upload_date else "",
+                    }
+                    for ds in datasets
+                ],
+                "count": len(datasets),
+            }
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Error listing datasets: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

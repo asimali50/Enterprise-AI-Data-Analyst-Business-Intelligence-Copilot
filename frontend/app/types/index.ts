@@ -162,3 +162,213 @@ export interface ErrorResponse {
   detail?: string;
   status_code: number;
 }
+
+// ─── AutoML Studio ───────────────────────────────────────────
+
+export type AutoMLTask = "regression" | "classification" | "clustering" | "time_series";
+export type ColumnRole = "numeric" | "boolean" | "categorical" | "datetime" | "text" | "id";
+
+export interface AutoMLColumn {
+  name: string;
+  dtype: string;
+  role: ColumnRole;
+  missing: number;
+  missing_pct: number;
+  distinct: number;
+  distinct_true?: number;
+  missing_true?: number;
+  unique_ratio: number;
+  cardinality: "low" | "medium" | "high";
+  stats?: {
+    mean?: number | null;
+    median?: number | null;
+    min?: number | null;
+    max?: number | null;
+    std?: number | null;
+  };
+}
+
+export interface DetectedTask {
+  task: AutoMLTask;
+  confidence: number;
+  target?: string | null;
+  time_column?: string | null;
+  reason: string;
+}
+
+export interface CandidateTarget {
+  column: string;
+  role: ColumnRole;
+  suitability: number;
+  task: AutoMLTask;
+  reason: string;
+  missing_pct: number;
+  distinct: number;
+}
+
+export interface DataQuality {
+  total_missing: number;
+  missing_columns: number;
+  health_score: number;
+  notes: string[];
+}
+
+export interface AutoMLInspect {
+  dataset_id: string;
+  filename: string;
+  shape: { rows: number; columns: number };
+  columns: AutoMLColumn[];
+  detected_tasks: DetectedTask[];
+  candidate_targets: CandidateTarget[];
+  data_quality: DataQuality;
+  recommendation: {
+    task?: AutoMLTask | null;
+    target?: string | null;
+    time_column?: string | null;
+    message?: string;
+  };
+  summary: string;
+}
+
+export interface CapabilityBreakdown {
+  label: string;
+  score: number;
+  weight: number;
+}
+
+export interface AutoMLModel {
+  id: string;
+  name: string;
+  family: string;
+  tier: "recommended" | "specialist" | "baseline" | "alternative";
+  trainable: boolean;
+  score: number;
+  rank: number;
+  tags: string[];
+  metrics: string[];
+  best_for: string;
+  tradeoffs: string;
+  requires?: string;
+  rationale: string;
+  why: string[];
+  capability_breakdown: Record<string, CapabilityBreakdown>;
+}
+
+export interface PerformanceEstimate {
+  quality: string;
+  band: [number, number];
+  score: number;
+  factors: string[];
+  disclaimer: string;
+}
+
+export interface AutoMLRecommendation {
+  dataset_id: string;
+  filename: string;
+  task: AutoMLTask;
+  target?: string | null;
+  time_column?: string | null;
+  n_rows: number;
+  n_features: number;
+  profile: Record<string, number>;
+  recommended_model?: string | null;
+  performance_estimate: PerformanceEstimate;
+  models: AutoMLModel[];
+  baseline: { id?: string | null; name?: string | null; score?: number | null };
+  why_top?: string | null;
+}
+
+export interface TrainResult {
+  success: boolean;
+  error?: string;
+  code?: string;
+  dataset_id?: string;
+  target?: string;
+  task?: string;
+  model_id?: string;
+  model_name?: string;
+  metrics?: Record<string, number>;
+  scoring?: string;
+  n_train?: number;
+  n_test?: number;
+  features_used?: number;
+  message?: string;
+}
+
+// ─── Model Training (multi-model pipeline) ─────────────────────
+
+export type TrainingMetric =
+  | "accuracy"
+  | "precision"
+  | "recall"
+  | "f1"
+  | "roc_auc"
+  | "r2"
+  | "rmse"
+  | "mae"
+  | "mape";
+
+export interface TrainingModelInfo {
+  id: string;
+  name: string;
+  task: "classification" | "regression";
+  available: boolean;
+  reason?: string | null;
+}
+
+export interface TrainingModelResult {
+  id: string;
+  name: string;
+  status: "trained" | "skipped";
+  metrics: Record<string, number | null>;
+  training_time_s: number;
+  prediction_time_s: number;
+  memory_mb?: number | null;
+  error?: string;
+}
+
+export interface TrainingRunSummary {
+  run_id: string;
+  dataset_id: string;
+  task: string;
+  target?: string | null;
+  best_model?: string | null;
+  primary_metric?: string | null;
+  n_rows: number;
+  n_features: number;
+  created_at?: string | null;
+}
+
+export interface TrainingRun {
+  run_id: string;
+  dataset_id: string;
+  task: string;
+  target?: string | null;
+  best_model?: string | null;
+  primary_metric?: string | null;
+  n_rows: number;
+  n_features: number;
+  created_at?: string | null;
+  models: TrainingModelResult[];
+  skipped: TrainingModelResult[];
+  config?: Record<string, unknown>;
+}
+
+export interface TrainingRunResponse {
+  success: boolean;
+  error?: string;
+  code?: string;
+  run_id?: string;
+  dataset_id?: string;
+  filename?: string;
+  task?: string;
+  target?: string | null;
+  n_rows?: number;
+  n_features?: number;
+  primary_metric?: string;
+  best_model?: string;
+  best_model_name?: string;
+  best_score?: number | null;
+  models?: TrainingModelResult[];
+  skipped?: TrainingModelResult[];
+}

@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.utils.logger import logger
 from app.database.sqlite_client import get_sqlite
 from app.database.duckdb_client import get_duckdb
-from app.api.routes import upload, health, analyze, chat, report
+from app.api.routes import upload, health, analyze, chat, report, cleaning, visualizations, export, automl, training
 
 # Application startup/shutdown
 @asynccontextmanager
@@ -18,6 +18,11 @@ async def lifespan(app: FastAPI):
     """Handle application startup and shutdown"""
     # Startup
     logger.info("Starting Enterprise AI Data Analyst API")
+
+    # Refuse to boot in production with insecure settings (dev secret, DEBUG,
+    # wildcard CORS). Throws before any DB is touched.
+    settings.validate_production()
+
     try:
         get_sqlite()  # Initialize SQLite
         get_duckdb()  # Initialize DuckDB
@@ -52,10 +57,14 @@ app = FastAPI(
 # Middleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+cors_origins = settings.cors_origins_list
+
+# In production, never send credentials with a wildcard origin (browsers reject
+# it and it widens the attack surface). Default to the configured origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=False if "*" in cors_origins else True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -66,6 +75,11 @@ app.include_router(upload.router, prefix=settings.API_V1_STR)
 app.include_router(analyze.router, prefix=settings.API_V1_STR)
 app.include_router(chat.router, prefix=settings.API_V1_STR)
 app.include_router(report.router, prefix=settings.API_V1_STR)
+app.include_router(cleaning.router, prefix=settings.API_V1_STR)
+app.include_router(visualizations.router, prefix=settings.API_V1_STR)
+app.include_router(export.router, prefix=settings.API_V1_STR)
+app.include_router(automl.router, prefix=settings.API_V1_STR)
+app.include_router(training.router, prefix=settings.API_V1_STR)
 
 # Root endpoint
 @app.get("/")
